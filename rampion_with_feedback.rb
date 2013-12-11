@@ -1,17 +1,16 @@
-#!/usr/bin/env ruby20
+#!/usr/bin/env ruby
 
 require 'trollop'
 require 'open3'
 
 
-# execute TODO
-SMT_SEMPARSE = ''
-EVAL_PL = ''
+# execute
+SMT_SEMPARSE = '/workspace/grounded/mosesdecoder/moses-chart-cmd/bin/gcc-4.7/release/debug-symbols-on/link-static/threading-multi/moses_chart -f /workspace/grounded/smt-semparse/working/2013-12-10T21.33.38/mert-work/moses.ini 2>/dev/null'
+EVAL_PL = '/workspace/grounded/wasp-1.0/data/geo-funql/eval/eval.pl'
 def exec natural_language_string, reference_output
-  return false
-  # parse...
-  #r = `echo "execute_funql_query(#{natural_language_string}, X)." | swipl -s #{EVAL_PL} 2>&1  | grep "X ="`
-  #return r==reference_output
+  res = SMT_SEMPARSE
+  r = `echo "execute_funql_query(#{natural_language_string}, X)." | swipl -s #{EVAL_PL} 2>&1  | grep "X ="`.strip
+  return r==reference_output
 end
 
 
@@ -24,7 +23,7 @@ class Translation
     @s = a[1].strip
     h = {}
     a[2].split.each { |i|
-      name, value = i.split
+      name, value = i.split '='
       value = value.to_f
       h[name] = value
     }
@@ -39,7 +38,7 @@ class Translation
   end
 end
 
-CDEC = "~/src/cdec-dtrain/decoder/cdec -r"
+CDEC = "/toolbox/cdec-dtrain/bin/cdec -r"
 def predict_translation s, k, ini, w
   cmd = " echo \"#{s}\" | #{CDEC} -c #{ini} -k #{k} -w #{w} 2>/dev/null"
   o, s = Open3.capture2(cmd)
@@ -224,9 +223,11 @@ def test opts
 end
 
 def adj_model a
-  x = 0.0
-  a.each {|i| x += i.model }
-  a.each {|i| i.model = i.model/x }
+  min = a.map{|i|i.model}.min
+  max = a.map{|i|i.model}.max
+  a.each { |i|
+    i.model = (i.model-min)/(max-min)
+  }
 end
 
 def main
@@ -234,12 +235,14 @@ def main
     opt :k, "k", :type => :int, :required => true
     opt :input, "'foreign' input", :type => :string, :required => true
     opt :references, "(parseable) references", :type => :string, :required => true
+    opt :gold, "gold standard parser output", :type => :string, :require => true
     opt :init_weights, "initial weights", :type => :string, :required => true, :short => '-w'
     opt :cdec_ini, "cdec config file", :type => :string, :default => './cdec.ini'
   end
 
   input = File.new(opts[:input], 'r').readlines.map{|i|i.strip}
   references = File.new(opts[:references], 'r').readlines.map{|i|i.strip}
+  gold = File.new(opts[:gold], 'r').readlines.map{|i|i.strip}
 
   # init weights
   w = NamedSparseVector.new
@@ -252,10 +255,11 @@ def main
     f.close
     # get kbest list for current input
     kbest = predict_translation i, opts[:k], opts[:cdec_ini], 'weights.tmp'
+    next if kbest.size==0 # FIXME
     score_translations kbest, references[j]
     adj_model kbest
     # get feedback
-    feedback = exec kbest[0].s, nil #TODO
+    feedback = exec kbest[0].s, gold[j]
     hope = ''; fear = ''
     if feedback == true
       references[i] = kbest[0].s
@@ -264,7 +268,8 @@ def main
       hope = hope_and_fear kbest, 'hope'
     end
     fear = hope_and_fear kbest, 'fear'
-
+    
+    puts "top1: 0 #{kbest[0].s} #{kbest[0].model} #{kbest[0].score}"
     puts "hope: #{hope.rank} #{hope.s} #{hope.model} #{hope.score}"
     puts "fear: #{fear.rank} #{fear.s} #{fear.model} #{fear.score}"
     puts
