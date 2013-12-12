@@ -1,16 +1,22 @@
 #!/usr/bin/env ruby
 
 require 'trollop'
+require 'tempfile'
 require 'open3'
 
 
 # execute
-SMT_SEMPARSE = '/workspace/grounded/mosesdecoder/moses-chart-cmd/bin/gcc-4.7/release/debug-symbols-on/link-static/threading-multi/moses_chart -f /workspace/grounded/smt-semparse/working/2013-12-10T21.33.38/mert-work/moses.ini 2>/dev/null'
+SMT_SEMPARSE = '/workspace/grounded/mosesdecoder/moses-chart-cmd/bin/gcc-4.7/release/debug-symbols-on/link-static/threading-multi/moses_chart -f /workspace/grounded/smt-semparse/latest/model/moses.ini 2>/dev/null'
 EVAL_PL = '/workspace/grounded/wasp-1.0/data/geo-funql/eval/eval.pl'
 def exec natural_language_string, reference_output
-  res = SMT_SEMPARSE
-  r = `echo "execute_funql_query(#{natural_language_string}, X)." | swipl -s #{EVAL_PL} 2>&1  | grep "X ="`.strip
-  return r==reference_output
+  flat_mrl = `echo "#{natural_language_string}" | ./stem.py | #{SMT_SEMPARSE}`.strip
+  func = `echo "#{flat_mrl}" | ./functionalize.py 2>/dev/null`.strip
+  res = `echo "execute_funql_query(#{func}, X)." | swipl -s #{EVAL_PL} 2>&1  | grep "X ="`.strip.split('X = ')[1]
+  puts "     nrl: #{natural_language_string}"
+  puts "flat mrl: #{flat_mrl}"
+  puts "    func: #{func}"
+  puts "  output: #{res}"
+  return res==reference_output, func, res
 end
 
 
@@ -151,7 +157,7 @@ class NamedSparseVector
   def to_file
     s = []
     @h.each_pair { |k,v| s << "#{k} #{v}" }
-    s.join "\n"
+    s.join("\n")+"\n"
   end
 
   def - other
@@ -236,6 +242,7 @@ def main
     opt :input, "'foreign' input", :type => :string, :required => true
     opt :references, "(parseable) references", :type => :string, :required => true
     opt :gold, "gold standard parser output", :type => :string, :require => true
+    opt :gold_mrl, "gold standard mrl", :type => :string, :short => '-h', :require => true
     opt :init_weights, "initial weights", :type => :string, :required => true, :short => '-w'
     opt :cdec_ini, "cdec config file", :type => :string, :default => './cdec.ini'
   end
@@ -243,38 +250,74 @@ def main
   input = File.new(opts[:input], 'r').readlines.map{|i|i.strip}
   references = File.new(opts[:references], 'r').readlines.map{|i|i.strip}
   gold = File.new(opts[:gold], 'r').readlines.map{|i|i.strip}
+  gold_mrl = File.new(opts[:gold_mrl], 'r').readlines.map{|i|i.strip}
 
   # init weights
   w = NamedSparseVector.new
   w.from_file opts[:init_weights]
 
+
+  positive_feedback = 0
+  without_translations = 0
+  with_proper_parse = 0
+  with_output = 0
+  count = 0
   input.each_with_index { |i,j|
+    count += 1
     # write current weights to file
-    f = File.new('weights.tmp', 'w+')
-    f.write w.to_file
-    f.close
+    tmp_file = Tempfile.new('rampion')
+    tmp_file_path = tmp_file.path
+    tmp_file.write w.to_file
+    tmp_file.close
     # get kbest list for current input
-    kbest = predict_translation i, opts[:k], opts[:cdec_ini], 'weights.tmp'
-    next if kbest.size==0 # FIXME
+    kbest = predict_translation i, opts[:k], opts[:cdec_ini], tmp_file_path
+    if kbest.size==0 # FIXME: shouldnt happen
+      without_translations += 1
+      next
+    end
     score_translations kbest, references[j]
     adj_model kbest
     # get feedback
-    feedback = exec kbest[0].s, gold[j]
+ 
+    puts "----top1"
+    puts "0 #{kbest[0].s} #{kbest[0].model} #{kbest[0].score}"
+    feedback, func, output = exec kbest[0].s, gold[j]
+    with_proper_parse +=1 if func!="None"
+    with_output +=1 if output!="null"
+    positive_feedback  += 1 if feedback==true
     hope = ''; fear = ''
-    if feedback == true
-      references[i] = kbest[0].s
-      hope = kbest[0].s
+    if feedback==true
+      puts "'#{kbest[0].s}'"
+      references[j] = kbest[0].s
+      hope = kbest[0]
     else
       hope = hope_and_fear kbest, 'hope'
     end
     fear = hope_and_fear kbest, 'fear'
     
-    puts "top1: 0 #{kbest[0].s} #{kbest[0].model} #{kbest[0].score}"
-    puts "hope: #{hope.rank} #{hope.s} #{hope.model} #{hope.score}"
-    puts "fear: #{fear.rank} #{fear.s} #{fear.model} #{fear.score}"
+    puts "----hope"
+    puts "#{hope.rank} #{hope.s} #{hope.model} #{hope.score}"
+    exec hope.s, gold[j]
+
+    puts "----fear"
+    puts "#{fear.rank} #{fear.s} #{fear.model} #{fear.score}"
+    exec fear.s, gold[j]
+
+    puts "----reference"
+    puts "// #{references[j]} // 1.0"
+    exec references[j], gold[j]
+    puts "GOLD MRL: #{gold_mrl[j]}"
+    puts "GOLD OUTPUT #{gold[j]}"
+
     puts
+
     w = update w, hope, fear
   }
+  puts "#{count} examples"
+  puts "#{((positive_feedback.to_f/count)*100).round 2}% with positive feedback (abs: #{positive_feedback})"
+  puts "#{((with_proper_parse.to_f/count)*100).round 2}% with proper parse (abs: #{with_proper_parse})"
+  puts "#{((with_output.to_f/count)*100).round 2}% with output (abs: #{with_output})"
+  puts "#{((without_translations.to_f/count)*100).round 2}% without translations (abs: #{without_translations})"
 end
 
 
