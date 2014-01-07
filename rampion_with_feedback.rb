@@ -3,21 +3,44 @@
 require 'trollop'
 require 'tempfile'
 require 'open3'
+require 'memcached'
 
 
 SMT_SEMPARSE = 'python /workspace/grounded/smt-semparse-cp/decode_sentence.py /workspace/grounded/smt-semparse-cp/working/full_dataset'
 EVAL_PL = '/workspace/grounded/wasp-1.0/data/geo-funql/eval/eval.pl'
 CDEC = "/toolbox/cdec-dtrain/bin/cdec"
 
+$cache = Memcached.new("localhost:11211")
+
 # execute
 def exec natural_language_string, reference_output, no_output=false
-  func   = `#{SMT_SEMPARSE} "#{natural_language_string}"`.strip
-  output = `echo "execute_funql_query(#{func}, X)." | swipl -s #{EVAL_PL} 2>&1  | grep "X ="`.strip.split('X = ')[1]
+  func = nil
+  output = nil
+  feedback = nil
+  key_prefix = natural_language_string.encode("ASCII", :invalid => :replace, :undef => :replace, :replace => "?").gsub(/ /,'_')
+  begin
+    func = $cache.get key_prefix+"__FUNC"
+    output = $cache.get key_prefix+"__OUTPUT"
+    feedback = $cache.get key_prefix+"__FEEDBACK"
+  rescue Memcached::NotFound
+    func   = `#{SMT_SEMPARSE} "#{natural_language_string}"`.strip
+    output = `echo "execute_funql_query(#{func}, X)." | swipl -s #{EVAL_PL} 2>&1  | grep "X ="`.strip.split('X = ')[1].strip
+    feedback = output==reference_output
+    begin
+      $cache.set key_prefix+"__FUNC", func
+      $cache.set key_prefix+"__OUTPUT", output
+      $cache.set key_prefix+"__FEEDBACK", feedback
+    rescue SystemExit, Interrupt
+      $cache.delete key_prefix+"__FUNC"
+      $cache.delete key_prefix+"__OUTPUT"
+      $cache.delete key_prefix+"__FEEDBACK"
+    end
+  end
   puts "        nrl: #{natural_language_string}" if !no_output
   puts "        mrl: #{func}" if !no_output
   puts "     output: #{output}" if !no_output
-  puts "   correct?: #{output==reference_output}" if !no_output
-  return output==reference_output, func, output
+  puts "   correct?: #{feedback}" if !no_output
+  return feedback, func, output
 end
 
 # decoder interaction/translations
@@ -217,17 +240,18 @@ class Stats
   end
 
   def update feedback, func, output
-    @with_parse +=1 if func!="None"
-    @with_output +=1 if output!="null"
+    @with_parse +=1 if func!="None"&&func!=''
+    @with_output +=1 if output!="null"&&output!=''
     @correct_output += 1 if feedback==true
   end
 
   def print total
+    without_parse = total-@with_parse
 <<-eos
   [#{@name}]
-         with parse #{((@with_parse/total)*100).round 2} abs:#{@with_parse}
-        with output #{((@with_output/total)*100).round 2} abs:#{@with_output}
-with correct output #{((@correct_output/total)*100).round 2} abs:#{@correct_output}
+         #{@name} with parse #{((@with_parse/total)*100).round 2} adj:#{((@with_parse/(total-without_parse))*100).round 2} abs:#{@with_parse}
+        #{@name} with output #{((@with_output/total)*100).round 2} adj:#{((@with_output/(total-without_parse))*100).round 2} abs:#{@with_output}
+#{@name} with correct output #{((@correct_output/total)*100).round 2} adj:#{((@correct_output/(total-without_parse))*100).round 2} abs:#{@correct_output}
 eos
   end
 end
@@ -240,8 +264,31 @@ def bag_of_words s, stopwords=[]
   s.split.uniq.sort.reject{|v| stopwords.include? v}
 end
 
+def get_hope_fear_standard kbest, feedback
+  hope = nil; fear = nil
+  if feedback == true
+    hope = kbest[0]
+  else
+    hope = hope_and_fear(kbest, 'hope')
+  end
+  fear = hope_and_fear(kbest, 'fear')
+  return hope, fear
+end
+
+def get_hope_fear_standard kbest, feedback
+  hope = nil; fear = nil
+  if feedback == true
+    hope = kbest[0]
+  else
+    hope = hope_and_fear(kbest, 'hope')
+  end
+  fear = hope_and_fear(kbest, 'fear')
+  return hope, fear
+end
+
 def main
   opts = Trollop::options do
+    # data
     opt :k, "k", :type => :int, :required => true
     opt :input, "'foreign' input", :type => :string, :required => true
     opt :references, "(parseable) references", :type => :string, :required => true
@@ -249,48 +296,66 @@ def main
     opt :gold_mrl, "gold parse", :type => :string, :short => '-h', :require => true
     opt :init_weights, "initial weights", :type => :string, :required => true, :short => '-w'
     opt :cdec_ini, "cdec config file", :type => :string, :default => './cdec.ini'
-    opt :eta, "learning rate", :type => :float, :default => 0.01
+    # output
+    opt :debug, "debug output", :type => :bool, :default => false
     opt :no_update, "don't update weights", :type => :bool, :default => false
-    opt :stop_after, "stop after x examples", :type => :int, :default => -1
     opt :output_weights, "output file for final weights", :type => :string, :required => true
+    opt :stop_after, "stop after x examples", :type => :int, :default => -1
+    opt :print_kbests, "print full kbest lists", :type => :bool, :default => false, :short => '-j'
+    # misc parameters
+    opt :eta, "learning rate", :type => :float, :default => 0.01
     opt :scale_model, "scale model score by this factor", :type => :float, :default => 1.0, :short => '-m'
     opt :normalize, "normalize weights after each update", :type => :bool, :default => false, :short => '-l'
-    opt :print_kbests, "print full kbest lists", :type => :bool, :default => false, :short => '-j'
+    # learning parameters
+    opt :iterate, "iteration X epochs", :type => :int, :default => 1, :short => '-u'
+    opt :real, "'real' rampion updates", :type => :bool, :default => false, :short => '-q'
+    opt :only_exec, "update only when top1 executes!", :default => false, :short => '-d'
     opt :hope2, "select hope from the first X items in kbest that executes", :type => :int, :default => 0, :short => '-x'
+    opt :hope3, "skip example if hope doesn't execute", :type => :bool, :default => false, :short => '-b'
+    opt :variant, "use top1 as fear if it does not execute", :type => :bool, :default => false
     opt :fear2, "skip example if fear executes", :type => :bool, :default => false
+    opt :skip_on_no_proper_gold, "skip if the reference didn't produce a proper gold output", :default => false, :short => '-n'
   end
 
+  # output configuration
   puts "cfg"
-  opts.each_pair {|k,v| puts "#{k}\t#{v}"}
+  opts.each_pair {|k,v| puts "#{k}=#{v}"}
   puts
 
-  input      = File.new(opts[:input], 'r').readlines.map{|i|i.strip}
-  references = File.new(opts[:references], 'r').readlines.map{|i|i.strip}
-  gold       = File.new(opts[:gold], 'r').readlines.map{|i|i.strip}
-  gold_mrl   = File.new(opts[:gold_mrl], 'r').readlines.map{|i|i.strip}
-
-  stopwords = File.new('stopwords.en', 'r').readlines.map{|i|i.strip}
+  # read files
+  input          = File.readlines(opts[:input], :encoding=>'utf-8').map{|i|i.strip}
+  references     = File.readlines(opts[:references], :encoding=>'utf-8').map{|i|[i.strip, nil]}
+  references_own = references.map{|i|false}
+  gold           = File.readlines(opts[:gold], :encoding=>'utf-8').map{|i|i.strip}
+  gold_mrl       = File.readlines(opts[:gold_mrl], :encoding=>'utf-8').map{|i|i.strip}
+  stopwords      = File.readlines('d/stopwords.en', :encoding=>'utf-8').map{|i|i.strip}
 
   # init weights
   w = NamedSparseVector.new
   w.from_file opts[:init_weights]
+  last_wf = ''
 
-  without_translations = 0
-  count                = 0
+# iterate
+opts[:iterate].times { |iter|
+  # numerous counters
+  without_translations  = 0
+  no_proper_gold_output = 0
+  count                 = 0
   top1_stats = Stats.new 'top1'
   hope_stats = Stats.new 'hope'
   fear_stats = Stats.new 'fear'
   refs_stats = Stats.new 'refs'
-  type1_updates = 0
-  type2_updates = 0
-  top1_hit = 0
-  top1_variant = 0
+  type1_updates     = 0
+  type2_updates     = 0
+  top1_hit          = 0
+  top1_variant      = 0
   top1_real_variant = 0
-  hope_hit = 0
-  hope_variant = 0
+  hope_hit          = 0
+  hope_variant      = 0
   hope_real_variant = 0
-  kbest_sz = 0
-  last_wf = ''
+  kbest_sz          = 0
+
+  # for each example
   input.each_with_index { |i,j|
     count += 1
     # write current weights to file
@@ -302,83 +367,140 @@ def main
     # get kbest list for current input
     kbest = predict_translation i, opts[:k], opts[:cdec_ini], tmp_file_path
     kbest_sz += kbest.size
-    if kbest.size==0
-      without_translations += 1
-      next
-    end
-    score_translations kbest, references[j]
-    if opts[:print_kbests]
-      puts "KBEST"
-      kbest.each_with_index { |k,l|
-        _print l, k.s, k.model, k.score
-      }
-    end
-    adj_model kbest, opts[:scale_model]
-    # get feedback
+    # output
     puts "EXAMPLE #{j}"
     puts "GOLD MRL: #{gold_mrl[j]}"
     puts "GOLD OUTPUT #{gold[j]}"
-    # fear
-    fear = hope_and_fear kbest, 'fear'
-    if opts[:fear2]
-      f, g, o = exec fear.s, gold[j], true
-      if f
-        puts "FEAR EXECUTED, skipping example\n\n"
+    # skip if no translation could be produced
+    if kbest.size == 0
+      without_translations += 1
+      puts "NO MT OUTPUT, skipping example\n\n"
+      next
+    end
+    # no 
+    if gold[j] == '[]' || gold[j] == '[...]'
+      no_proper_gold_output += 1
+      if opts[:skip_on_no_proper_gold]
+        puts "NO PROPER GOLD OUTPUT, skipping example\n\n"
         next
       end
     end
-    # top1
-    puts "---top1"
-    _print 0, kbest[0].s, kbest[0].model, kbest[0].score
-    feedback, func, output = exec kbest[0].s, gold[j]
-    # hope2
-    parses = []
-    if opts[:hope2]>0
-      already_seen = {}
-      puts "<<KBEST EXEC"
-      (1).upto([opts[:hope2]-1, kbest.size-1].min) { |l|
-        f, g, o = exec kbest[l].s, gold[j], true
-        words = bag_of_words kbest[l].s, stopwords
-        parses << f
-        puts "#{f} | #{l} | #{kbest[l].s} #{words.to_s}" if !already_seen.has_key? words
-        already_seen[words] = true
+    # score kbest list
+    score_translations kbest, references[j][0]
+    # print kbest list
+    if opts[:print_kbests]
+      puts "<<<KBEST"
+      kbest.each_with_index { |k,l|
+        _print l, k.s, k.model, k.score
       }
       puts ">>>"
     end
+    # adjust model scores to fit in [0,1]
+    adj_model kbest, opts[:scale_model]
+    # top1
+    puts "---top1"
+    puts "TOP1 TRANSLATION: #{kbest[0].s}" if iter+1==opts[:iterate]
+    _print 0, kbest[0].s, kbest[0].model, kbest[0].score
+    feedback, func, output = exec kbest[0].s, gold[j]
     top1_stats.update feedback, func, output
-    # hope & update
-    ref_words = bag_of_words references[j], stopwords
-    hope = nil
-    if feedback==true
-      if kbest[0].s == references[j]
+    # reference as bag of words
+    ref_words = bag_of_words references[j][0], stopwords
+
+
+
+
+    # hope2
+    hope_idx = nil
+    if opts[:hope2] > 0
+      (1).upto([opts[:hope2]-1, kbest.size-1].min) { |l|
+        f = exec kbest[l].s, gold[j], true
+        if f[0]
+          hope_idx = l
+          next
+        end
+      }
+    end
+    hope = nil; fear = nil
+    if opts[:real]
+      if kbest[0].s != references[j][0]
+        hope = hope_and_fear(kbest, 'hope')
+        fear = kbest[0]
+      else
+        hope = kbest[0]
+        fear = hope_and_fear(kbest, 'fear')
+      end
+    elsif feedback==true
+      type1_updates += 1
+      if kbest[0].s == references[j][0]
         top1_hit +=1
       else
         top1_variant += 1
-        top1_real_variant += 1 if bag_of_words(kbest[0].s,stopwords)!=ref_words
+        if bag_of_words(kbest[0].s,stopwords) != ref_words
+          top1_real_variant += 1
+          if opts[:debug]
+            puts "<<<DEBUG top1 variant"
+            puts kbest[0].s
+            puts bag_of_words(kbest[0].s,stopwords).to_s
+            puts "ref: #{ref_words.to_s}"
+            puts ">>>"
+          end
+        end
       end
-      #references[j] = kbest[0].s
+      if opts[:only_exec]
+        references[j] = [kbest[0].s, kbest[0]]
+        references_own[j] = true
+      end
       hope = kbest[0]
-      type1_updates += 1
+    elsif opts[:only_exec]
+      if references_own[j]
+        hope = references[j][1]
+      else
+        puts "CANNOT FIND HOPE BC NO TOP1 DOESN'T EXEC, skipping example\n\n"
+        next
+      end
     else
-      if opts[:hope2]>0
-        c=-1; found = parses.detect{|b| c+=1; b }
-        hope = kbest[c] if found
-        if !found
+      type2_updates += 1
+      if opts[:variant]
+        fear = kbest[0]
+      end
+      if opts[:hope2] > 0
+        if hope_idx
+          hope = kbest[hope_idx]
+        else
           puts "NO GOOD HOPE, skipping example\n\n"
           next
         end
       else
         hope = hope_and_fear kbest, 'hope'
+        if opts[:hope3]
+          f = exec hope.s, gold[j], true
+          if !f[0]
+            puts "HOPE NO +FEEDBACK, skipping example\n\n"
+            next
+          end
+        end
       end
-      if hope.s == references[j]
+      if hope.s == references[j][0]
         hope_hit += 1
       else
         hope_variant += 1
         hope_real_variant += 1 if bag_of_words(hope.s,stopwords)!=ref_words
       end
-      type2_updates += 1
+    end
+    fear = hope_and_fear(kbest, 'fear') if !fear
+    if opts[:fear2]
+      f = exec fear.s, gold[j], true
+      f = f[0]
+      if f
+        puts "FEAR EXECUTED, skipping example\n\n"
+        next
+      end
     end
 
+
+
+
+    # output info for current example
     puts "---hope"
     _print hope.rank, hope.s, hope.model, hope.score
     feedback, func, output =  exec hope.s, gold[j]
@@ -388,17 +510,30 @@ def main
     feedback, func, output = exec fear.s, gold[j]
     fear_stats.update  feedback, func, output
     puts "---reference"
-    _print 'x', references[j], 'x', 1.0
-    feedback, func, output = exec references[j], gold[j]
+    _print 'x', references[j][0], 'x', 1.0
+    feedback, func, output = exec references[j][0], gold[j]
     refs_stats.update feedback, func, output
-
     puts
 
+    # update
     w = update w, hope, fear, opts[:eta] if !opts[:no_update]
+
+    # normalize weight vector to length 1
     w.normalize! if opts[:normalize]
+
+    # stopx after x examples
     break if opts[:stop_after]>0 && (j+1)==opts[:stop_after]
   }
-  FileUtils::cp(last_wf, opts[:output_weights])
+
+  # keep weight files for each iteration
+  if opts[:iterate] > 1
+    FileUtils::cp(last_wf, "#{opts[:output_weights]}.#{iter}")
+  else
+    FileUtils::cp(last_wf, opts[:output_weights])
+  end
+
+  # output stats
+  puts "iteration ##{iter}/#{opts[:iterate]}"
   puts "#{count} examples"
   puts "    type1 updates: #{type1_updates}"
   puts "    type2 updates: #{type2_updates}"
@@ -410,10 +545,12 @@ def main
   puts "hope real variant: #{hope_real_variant}"
   puts "       kbest size: #{(kbest_sz/count).round 2}"
   puts "#{((without_translations.to_f/count)*100).round 2}% without translations (abs: #{without_translations})"
+  puts "#{((no_proper_gold_output.to_f/count)*100).round 2}% no good gold output (abs: #{no_proper_gold_output})"
   puts top1_stats.print count
   puts hope_stats.print count
   puts fear_stats.print count
   puts refs_stats.print count
+}
 end
 
 
