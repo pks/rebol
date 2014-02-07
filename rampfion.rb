@@ -40,8 +40,10 @@ def exec natural_language_string, reference_output, no_output=false
     output = $cache.get key_prefix+"__OUTPUT"
     feedback = $cache.get key_prefix+"__FEEDBACK"
   rescue Memcached::NotFound
-    func   = spawn_with_timeout("#{SMT_SEMPARSE} \"#{natural_language_string}\"").strip
-    output = spawn_with_timeout("echo \"execute_funql_query(#{func}, X).\" | swipl -s #{EVAL_PL} 2>&1  | grep \"X =\"").strip.split('X = ')[1]
+    #func   = spawn_with_timeout("#{SMT_SEMPARSE} \"#{natural_language_string}\"").strip
+    func   = `#{SMT_SEMPARSE} "#{natural_language_string}"`.strip
+    #output = spawn_with_timeout("echo \"execute_funql_query(#{func}, X).\" | swipl -s #{EVAL_PL} 2>&1  | grep \"X =\"").strip.split('X = ')[1]
+    output = `echo "execute_funql_query(#{func}, X)." | swipl -s #{EVAL_PL} 2>&1  | grep "X ="`.strip.split('X = ')[1]
     feedback = output==reference_output
     begin
       $cache.set key_prefix+"__FUNC", func
@@ -361,6 +363,22 @@ def gethopefear_fear_no_exec_hope_exec kbest, feedback, gold, max
   return hope, fear, skip, type1, type2
 end
 
+def gethopefear_fear_no_exec_hope_exec_skip kbest, feedback, gold, max
+  hope = fear = nil
+  type1 = type2 = false
+  if feedback == true
+    hope = kbest[0]
+    type1 = true
+  else
+    hope = hope_and_fear(kbest, 'hope')
+    type2 = true
+  end
+  fear = hope_and_fear(kbest, 'fear')
+  skip = exec(fear.s, gold, true)[0]||!exec(hope.s, gold, true)[0]
+  return hope, fear, skip, type1, type2
+end
+
+
 def gethopefear_only_exec kbest, feedback, gold, max, own_reference=nil
   hope = fear = nil; hope_idx = 0; new_reference = nil
   type1 = type2 = false
@@ -463,7 +481,7 @@ def main
     # important parameters
     opt :eta, "learning rate", :type => :float, :default => 0.01
     opt :iterate, "iteration X epochs", :type => :int, :default => 1, :short => '-j'
-    opt :variant, "standard, rampion, fear_no_exec, fear_no_exec_skip, fear_no_exec_hope_exec, only_exec", :default => 'standard'
+    opt :variant, "standard, rampion, fear_no_exec, fear_no_exec_skip, fear_no_exec_hope_exec, fear_no_exec_hope_exec_skip, only_exec", :default => 'standard'
     # misc parameters
     opt :scale_model, "scale model score by this factor", :type => :float, :default => 1.0, :short => '-m'
     opt :normalize, "normalize weights after each update", :type => :bool, :default => false, :short => '-n'
@@ -569,6 +587,8 @@ opts[:iterate].times { |iter|
       hope, fear, skip, type1, type2 = gethopefear_fear_no_exec kbest, feedback, gold[j], opts[:hope_fear_max]
     elsif opts[:variant] == 'fear_no_exec_hope_exec'
       hope, fear, skip, type1, type2 = gethopefear_fear_no_exec_hope_exec kbest, feedback, gold[j], opts[:hope_fear_max]
+    elsif opts[:variant] == 'fear_no_exec_hope_exec_skip'
+      hope, fear, skip, type1, type2 = gethopefear_fear_no_exec_hope_exec_skip kbest, feedback, gold[j], opts[:hope_fear_max]
     elsif opts[:variant] == 'only_exec'
       hope, fear, skip, type1, type2, new_reference = gethopefear_only_exec kbest, feedback, gold[j], opts[:hope_fear_max], own_references[j]
     else
