@@ -141,7 +141,7 @@ def main
       tmp_file.write w.to_kv ' ', "\n"
       tmp_file.close
 
-      kbest = cdec_kbest '/workspace/grounded/mt-system/cdec/decoder/cdec', i, cfg[:cdec_ini], tmp_file_path, cfg[:k]
+      kbest = cdec_kbest '/toolbox/cdec-dtrain/decoder/cdec', i, cfg[:cdec_ini], tmp_file_path, cfg[:k]
       kbest_sz += kbest.size
 
       STDERR.write "\n=================\n"
