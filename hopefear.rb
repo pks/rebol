@@ -1,12 +1,12 @@
 def hope_and_fear kbest, action
   max = -1.0/0
   max_idx = -1
-  kbest.each_with_index { |i,j|
-    if action=='hope' && i.score + i.other_score > max
-      max_idx = j; max = i.score + i.other_score
+  kbest.each_with_index { |k,i|
+    if action=='hope' && k.scores[:decoder] + k.scores[:psb] > max
+      max_idx = i; max = k.scores[:decoder] + k.scores[:psb]
     end
-    if action=='fear' && i.score - i.other_score > max
-      max_idx = j; max = i.score - i.other_score
+    if action=='fear' && k.scores[:decoder] - k.scores[:psb] > max
+      max_idx = i; max = k.scores[:decoder] - k.scores[:psb]
     end
   }
   return kbest[max_idx]
@@ -36,7 +36,7 @@ def gethopefear_fear_no_exec kbest, feedback, gold, max
     hope = hope_and_fear(kbest, 'hope')
     type2 = true
   end
-  kbest.sort{|x,y|(y.score+y.other_score)<=>(x.score+x.other_score)}.each_with_index { |k,i|
+  kbest.sort{|x,y|(y.scores[:decoder]+y.scores[:psb])<=>(x.scores[:decoder]+x.scores[:psb])}.each_with_index { |k,i|
     break if i==max
     if !exec(k.s, gold, true)[0]
        fear = k
@@ -65,7 +65,7 @@ end
 def gethopefear_fear_no_exec_hope_exec kbest, feedback, gold, max
   hope = fear = nil; hope_idx = 0
   type1 = type2 = false
-  sorted_kbest = kbest.sort{|x,y|(y.score+y.other_score)<=>(x.score+x.other_score)}
+  sorted_kbest = kbest.sort{|x,y|(y.scores[:decoder]+y.scores[:psb])<=>(x.scores[:decoder]+x.scores[:psb])}
   if feedback == true
     hope = kbest[0]
     type1 = true
