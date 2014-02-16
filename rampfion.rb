@@ -9,27 +9,27 @@ require_relative './hopefear'
 
 SMT_SEMPARSE = 'python /workspace/grounded/smt-semparse-cp/decode_sentence.py /workspace/grounded/smt-semparse-cp/working/full_dataset'
 EVAL_PL = '/workspace/grounded/wasp-1.0/data/geo-funql/eval/eval.pl'
-$cache = Memcached.new("localhost:11211")
+$cache = Memcached.new('localhost:11211')
 
 def exec natural_language_string, reference_output, no_output=false
   mrl = output = feedback = nil
-  key_prefix = natural_language_string.encode("ASCII", :invalid => :replace, :undef => :replace, :replace => "?").gsub(/ /,'_')
+  key_prefix = natural_language_string.encode('ASCII', :invalid => :replace, :undef => :replace, :replace => '?').gsub(/ /,'_')
   begin
-    mrl      = $cache.get key_prefix+"__MRL"
-    output   = $cache.get key_prefix+"__OUTPUT"
-    feedback = $cache.get key_prefix+"__FEEDBACK"
+    mrl      = $cache.get key_prefix+'__MRL'
+    output   = $cache.get key_prefix+'__OUTPUT'
+    feedback = $cache.get key_prefix+'__FEEDBACK'
   rescue Memcached::NotFound
     mrl      = spawn_with_timeout("#{SMT_SEMPARSE} \"#{natural_language_string}\" ", 60).strip
     output   = spawn_with_timeout("echo \"execute_funql_query(#{mrl}, X).\" | swipl -s #{EVAL_PL} 2>&1  | grep \"X =\"", 60).strip.split('X = ')[1]
     feedback = output==reference_output
     begin
-      $cache.set key_prefix+"__MRL", mrl
-      $cache.set key_prefix+"__OUTPUT", output
-      $cache.set key_prefix+"__FEEDBACK", feedback
+      $cache.set key_prefix+'__MRL', mrl
+      $cache.set key_prefix+'__OUTPUT', output
+      $cache.set key_prefix+'__FEEDBACK', feedback
     rescue SystemExit, Interrupt
-      $cache.delete key_prefix+"__MRL"
-      $cache.delete key_prefix+"__OUTPUT"
-      $cache.delete key_prefix+"__FEEDBACK"
+      $cache.delete key_prefix+'__MRL'
+      $cache.delete key_prefix+'__OUTPUT'
+      $cache.delete key_prefix+'__FEEDBACK"'
     end
   end
   STDERR.write "        nrl: #{natural_language_string}\n" if !no_output
