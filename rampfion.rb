@@ -67,6 +67,7 @@ end
 def adjust_model_scores kbest, factor
   min = kbest.map{ |k| k.scores[:decoder] }.min
   max = kbest.map{ |k| k.scores[:decoder] }.max
+  return if min==0&&max==0
   kbest.each { |k| k.scores[:decoder] = factor*((k.scores[:decoder]-min)/(max-min)) }
 end
 
