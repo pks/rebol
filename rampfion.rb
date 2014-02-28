@@ -7,7 +7,8 @@ require 'memcached'
 require_relative './hopefear'
 
 
-SMT_SEMPARSE = 'python /workspace/grounded/smt-semparse-cp/decode_sentence.py /workspace/grounded/smt-semparse-cp/working/full_dataset'
+# FIXME
+SMT_SEMPARSE = 'python /workspace/grounded/smt-semparse-cp/decode_sentence.py /workspace/grounded/smt-semparse-cp/working/tgttosrc'
 EVAL_PL = '/workspace/grounded/wasp-1.0/data/geo-funql/eval/eval.pl'
 $cache = Memcached.new('localhost:11211')
 
@@ -110,7 +111,7 @@ def main
   own_references = nil
   own_references = references.map{ |i| nil } if cfg[:variant]=='only_exec'
 
-  w = SparseVector.from_file cfg[:init_weights]
+  w = SparseVector.from_file cfg[:init_weights], ' '
   last_weights_fn = ''
 
   cfg[:iterate].times { |iter|
