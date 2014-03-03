@@ -5,14 +5,9 @@ require 'trollop'
 require 'tempfile'
 require 'memcached'
 require_relative './hopefear'
+require_relative './cfg.rb'
 
-# edit here to change the parser
-SMT_SEMPARSE = 'python /workspace/grounded/smt-semparse-cp/decode_sentence.py /workspace/grounded/smt-semparse-cp/working/tgttosrc'
-
-# this is the 'fixed' version of eval.pl
-EVAL_PL = '/workspace/grounded/wasp-1.0/data/geo-funql/eval/eval.pl'
-
-# memcached hast to be running
+# memcached has to be running
 $cache = Memcached.new('localhost:11211')
 
 
@@ -162,7 +157,7 @@ def main
       tmp_file.close
 
       # get kbest list
-      kbest = cdec_kbest '/toolbox/cdec-dtrain/decoder/cdec', i, cfg[:cdec_ini], tmp_file_path, cfg[:k]
+      kbest = cdec_kbest CDEC_BIN, i, cfg[:cdec_ini], tmp_file_path, cfg[:k]
       kbest_sz += kbest.size
 
       STDERR.write "\n=================\n"
