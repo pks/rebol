@@ -1,0 +1,13 @@
+corpus.xml : corpus-true.xml of Jacob Andreas, without non-printable chars
+delete.ids : references that give empty answers although they shouldn't
+eval.pl : modified eval script from wasp-1.0
+folds600 : splits for cross-validation
+geoquery.de : slightly corrected German part
+geoquery.en : English part
+geoquery.funql : geoquery functional query language
+geoquery.gold : gold output, eval.pl script modified to output full answers
+geoquery.prolog : prolog mrl
+README : this file
+split880.test.ids :  880 train/test split test ids
+split880.train.ids : 880 train/test split train ids
+
