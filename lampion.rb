@@ -5,7 +5,6 @@ require 'trollop'
 require 'tempfile'
 require 'memcached'
 require_relative './hopefear'
-require_relative './cfg.rb'
 
 # memcached has to be running
 $cache = Memcached.new('localhost:11211')
