@@ -77,16 +77,17 @@ end
 def main
   cfg = Trollop::options do
     # [data]
-    opt :k,              "k",                      :type => :int,    :default =>   100,            :short => '-k'
-    opt :input,          "'foreign' input",        :type => :string, :required => true,            :short => '-i'
-    opt :references,     "(parseable) references", :type => :string, :required => true,            :short => '-r'
-    opt :gold,           "gold output",            :type => :string, :required => true,            :short => '-g'
+    opt :k,              "k",                      :type => :int,    :default =>   100,             :short => '-k'
+    opt :input,          "'foreign' input",        :type => :string, :required => true,             :short => '-i'
+    opt :references,     "(parseable) references", :type => :string, :required => true,             :short => '-r'
+    opt :gold,           "gold output",            :type => :string, :required => true,             :short => '-g'
     # just for debugging:
-    opt :gold_mrl,       "gold parse",             :type => :string, :required => true,            :short => '-h'
-    opt :init_weights,   "initial weights",        :type => :string, :required => true,            :short => '-w'
-    opt :cdec_ini,       "cdec config file",       :type => :string, :required => true,            :short => '-c'
+    opt :gold_mrl,       "gold parse",             :type => :string, :required => true,             :short => '-h'
+    opt :init_weights,   "initial weights",        :type => :string, :required => true,             :short => '-w'
+    opt :global_vars,    "semantic parser, cdec bin, eval.pl", :type => :string, :required => true, :short => '-b' 
+    opt :cdec_ini,       "cdec config file",       :type => :string, :required => true,             :short => '-c'
     # just used for 1best/hope variant detection
-    opt :stopwords_file, "stopwords file",         :type => :string, :default => 'd/stopwords.en', :short => '-t'
+    opt :stopwords_file, "stopwords file",         :type => :string, :default => 'd/stopwords.en',  :short => '-t'
     # [output]
     opt :output_weights, "output file for final weights", :type => :string, :required => true, :short => '-o'
     opt :debug,          "debug output",                  :type => :bool,   :default => false, :short => '-d'
@@ -106,8 +107,12 @@ def main
     opt :variant, "standard, rampion, fear_no_exec, fear_no_exec_skip, fear_no_exec_hope_exec, fear_no_exec_hope_exec_skip, only_exec", :default => 'standard', :short => '-v'
   end
 
+  require_relative cfg[:global_vars]
   STDERR.write "CONFIGURATION\n"
   cfg.each_pair { |k,v| STDERR.write " #{k}=#{v}\n" }
+  STDERR.write "SMT_SEMPARSE=#{SMT_SEMPARSE}\n"
+  STDERR.write "EVAL_PL=#{EVAL_PL}\n"
+  STDERR.write "CDEC_BIN=#{CDEC_BIN}\n\n"
 
   # read data
   input      = ReadFile.readlines_strip cfg[:input]
