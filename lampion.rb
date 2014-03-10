@@ -6,9 +6,6 @@ require 'tempfile'
 require 'memcached'
 require_relative './hopefear'
 
-# memcached has to be running
-$cache = Memcached.new('localhost:11211')
-
 
 def exec natural_language_string, reference_output, no_output=false
   mrl = output = feedback = nil
@@ -20,9 +17,10 @@ def exec natural_language_string, reference_output, no_output=false
     output   = $cache.get key_prefix+'__OUTPUT'
     feedback = $cache.get key_prefix+'__FEEDBACK'
   rescue Memcached::NotFound
+    mrl_cmd      = "#{SMT_SEMPARSE} \"#{natural_language_string}\""
     # beware: EVAL_PL sometimes hangs and can't be killed!
-    mrl      = spawn_with_timeout("#{SMT_SEMPARSE} \"#{natural_language_string}\" ", 60).strip
-    output   = spawn_with_timeout("echo \"execute_funql_query(#{mrl}, X).\" | swipl -s #{EVAL_PL} 2>&1  | grep \"X =\"", 60).strip.split('X = ')[1]
+    mrl = spawn_with_timeout(mrl_cmd, TIMEOUT, ACCEPT_ZOMBIES).strip
+    output   = spawn_with_timeout("echo \"execute_funql_query(#{mrl}, X).\" | swipl -s #{EVAL_PL} 2>&1  | grep \"X =\"", TIMEOUT).strip.split('X = ')[1]
     feedback = output==reference_output
     begin
       $cache.set key_prefix+'__MRL', mrl
