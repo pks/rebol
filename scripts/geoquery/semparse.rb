@@ -1,8 +1,10 @@
 #!/usr/bin/env ruby
 
 require 'nlp_ruby'
-require_relative '../../cfg.rb'
+require 'memcached'
 
+
+require_relative ARGV[0]
 
 while line = STDIN.gets
   puts `#{SMT_SEMPARSE} "#{line}"`

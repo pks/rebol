@@ -68,7 +68,7 @@ def adjust_model_scores kbest, factor
   min = kbest.map{ |k| k.scores[:decoder] }.min
   max = kbest.map{ |k| k.scores[:decoder] }.max
   return if min==0&&max==0
-  kbest.each { |k| k.scores[:decoder] = factor*((k.scores[:decoder]-min)/(max-min)) }
+  kbest.each { |k| k.scores[:decoder_orig] = k.scores[:decoder]; k.scores[:decoder] = factor*((k.scores[:decoder]-min)/(max-min)) }
 end
 
 def main
@@ -187,14 +187,14 @@ def main
       # get per-sentence BLEU scores
       kbest.each { |k| k.scores[:psb] = BLEU::per_sentence_bleu k.s, references[j] }
 
+      # map decoder scores to [0,1]
+      adjust_model_scores kbest, cfg[:scale_model]
+
       if cfg[:print_kbest]
         STDERR.write "\n<<< KBEST\n"
         kbest.each_with_index { |k,l| STDERR.write k.to_s2+"\n" }
         STDERR.write ">>>\n"
       end
-
-      # map decoder scores to [0,1]
-      adjust_model_scores kbest, cfg[:scale_model]
 
       # informative output
       STDERR.write "\n [TOP1]\n"
