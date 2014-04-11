@@ -115,6 +115,7 @@ def gethopefear_fear_no_exec_hope_exec_skip kbest, feedback, gold, max
   return hope, fear, skip, type1, type2
 end
 
+# new variant w/ "real" reference
 def gethopefear_only_exec kbest, feedback, gold, max, own_reference=nil
   hope = fear = nil; hope_idx = 0; new_reference = nil
   type1 = type2 = false

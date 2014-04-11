@@ -4,6 +4,7 @@ require 'nlp_ruby'
 require 'trollop'
 require 'tempfile'
 require 'memcached'
+require 'digest'
 require_relative './hopefear'
 
 
@@ -11,7 +12,7 @@ def exec natural_language_string, reference_output, no_output=false
   mrl = output = feedback = nil
   # this may cause collisions, but there are not so many German words that
   # could have different Umlauts at the same position, e.g. Häuser => H?user
-  key_prefix = natural_language_string.encode('ASCII', :invalid => :replace, :undef => :replace, :replace => '?').gsub(/ /,'_')
+  key_prefix = Digest::SHA1.hexdigest(natural_language_string.encode('ASCII', :invalid => :replace, :undef => :replace, :replace => '?').gsub(/ /,'_'))
   begin
     mrl      = $cache.get key_prefix+'__MRL'
     output   = $cache.get key_prefix+'__OUTPUT'
