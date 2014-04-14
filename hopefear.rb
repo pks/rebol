@@ -162,7 +162,7 @@ def gethopefear_rampion kbest, reference
     type1 = true
   else
     hope = hope_and_fear kbest, 'hope'
-    # 1best is automatically fear if it doesn't match reference 
+    # 1best is automatically fear if it doesn't match reference
     fear = kbest[0]
     type2 = true
   end

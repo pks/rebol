@@ -18,7 +18,7 @@ def exec natural_language_string, reference_output, no_output=false
     output   = $cache.get key_prefix+'__OUTPUT'
     feedback = $cache.get key_prefix+'__FEEDBACK'
   rescue Memcached::NotFound
-    mrl_cmd      = "#{SMT_SEMPARSE} \"#{natural_language_string}\""
+    mrl_cmd      = "#{SMT_SEMPARSE} \"#{natural_language_string.gsub('"', ' ')}\""
     # beware: EVAL_PL sometimes hangs and can't be killed!
     mrl = spawn_with_timeout(mrl_cmd, TIMEOUT, ACCEPT_ZOMBIES).strip
     output   = spawn_with_timeout("echo \"execute_funql_query(#{mrl}, X).\" | swipl -s #{EVAL_PL} 2>&1  | grep \"X =\"", TIMEOUT).strip.split('X = ')[1]
@@ -82,7 +82,7 @@ def main
     # just for debugging:
     opt :gold_mrl,       "gold parse",             :type => :string, :required => true,             :short => '-h'
     opt :init_weights,   "initial weights",        :type => :string, :required => true,             :short => '-w'
-    opt :global_vars,    "semantic parser, cdec bin, eval.pl", :type => :string, :required => true, :short => '-b' 
+    opt :global_vars,    "semantic parser, cdec bin, eval.pl", :type => :string, :required => true, :short => '-b'
     opt :cdec_ini,       "cdec config file",       :type => :string, :required => true,             :short => '-c'
     # just used for 1best/hope variant detection
     opt :stopwords_file, "stopwords file",         :type => :string, :default => 'd/stopwords.en',  :short => '-t'

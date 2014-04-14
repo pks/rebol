@@ -13,7 +13,7 @@ while line = STDIN.gets
     a[0] = 1
     a[1] = 1
   elsif line!=''
-    a[1] = 1 
+    a[1] = 1
   end
   puts a.join " "
 end
