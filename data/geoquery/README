@@ -13,6 +13,5 @@ split880.train.ids : 880 train/test split train ids
 ../stopwords.en : English stopwords file
 ../weights.init : initial weights
 
-smt-semparse/ : slightly adapted code for Andreas' smt-semparse
-wasp/         : adapted stuff from wasp-1.0
+wasp-1.0/ : modified stuff from wasp-1.0
 

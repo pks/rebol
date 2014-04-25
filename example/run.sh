@@ -1,8 +1,10 @@
 #!/bin/bash
 
-# memcached has to be running! `memcached -p 31337`
+# memcached has to be running!
+#memcached -p 31337
 
-# run rebol with rampion variant for 1 epoch over 10 examples (data.*)
+CDEC=/toolbox/cdec
+
 ../rebol.rb \
   -k 100 \
   -i $(pwd)/data.in \
@@ -17,10 +19,10 @@
   -l \
   -e 0.01 \
   -j 1 \
-  -v rampion 2>output.stderr > output.stdout
+  -v rebol 2>output.stderr > output.stdout
 
 # translate test
-/toolbox/cdec-dtrain/decoder/cdec \
+$CDEC/decoder/cdec \
   -c cdec.ini \
   -w output-weights 2>/dev/null \
   < data.in  \

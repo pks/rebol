@@ -2,11 +2,11 @@ def hope_and_fear kbest, action
   max = -1.0/0
   max_idx = -1
   kbest.each_with_index { |k,i|
-    if action=='hope' && k.scores[:decoder] + k.scores[:psb] > max
-      max_idx = i; max = k.scores[:decoder] + k.scores[:psb]
+    if action=='hope' && k.scores[:decoder] + k.scores[:per_sentence_bleu] > max
+      max_idx = i; max = k.scores[:decoder] + k.scores[:per_sentence_bleu]
     end
-    if action=='fear' && k.scores[:decoder] - k.scores[:psb] > max
-      max_idx = i; max = k.scores[:decoder] - k.scores[:psb]
+    if action=='fear' && k.scores[:decoder] - k.scores[:per_sentence_bleu] > max
+      max_idx = i; max = k.scores[:decoder] - k.scores[:per_sentence_bleu]
     end
   }
   return max_idx
@@ -18,10 +18,10 @@ def gethopefear_rebol kbest, feedback, gold, max, own_reference=nil
   if feedback == true
     # hope
     hope = kbest[0]
-    new_reference = hope
-    kbest.each { |k| k.scores[:psb] = BLEU::per_sentence_bleu k.s, new_reference }
+    new_reference = hope.s
+    kbest.each { |k| k.scores[:per_sentence_bleu] = BLEU::per_sentence_bleu k.s, new_reference }
     # fear
-    kbest.sort_by { |k| -(k.scores[:model]-k.score[:psb]) }.each_with_index { |k,i|
+    kbest.sort_by { |k| -(k.scores[:decoder]-k.scores[:per_sentence_bleu]) }.each_with_index { |k,i|
       break if i==max
       if !exec(k.s, gold, true)[0]
         fear = k
@@ -33,7 +33,7 @@ def gethopefear_rebol kbest, feedback, gold, max, own_reference=nil
     # fear
     fear = kbest[0]
     # hope
-    kbest.sort_by { |k| -(k.scores[:model]+k.score[:psb]) }.each_with_index { |k,i|
+    kbest.sort_by { |k| -(k.scores[:decoder]+k.scores[:per_sentence_bleu]) }.each_with_index { |k,i|
       break if i==max
       if exec(k.s, gold, true)[0]
         hope = k
@@ -67,7 +67,7 @@ def gethopefear_exec kbest, feedback, gold, max, own_reference=nil
   type1 = type2 = false
   if feedback == true
     hope = kbest[0]
-    new_reference = hope
+    new_reference = hope.s
     type1 = true
   elsif own_reference
     hope = own_reference

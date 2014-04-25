@@ -185,7 +185,7 @@ def main
       end
 
       # get per-sentence BLEU scores
-      kbest.each { |k| k.scores[:psb] = BLEU::per_sentence_bleu k.s, references[j] }
+      kbest.each { |k| k.scores[:per_sentence_bleu] = BLEU::per_sentence_bleu k.s, references[j] }
 
       # map decoder scores to [0,1]
       adjust_model_scores kbest, cfg[:scale_model]
@@ -224,7 +224,7 @@ def main
       end
 
       if new_reference
-        own_references[j] = new_reference.s
+        own_references[j] = new_reference if new_reference!=references[j]
       end
 
       type1_updates+=1 if type1
@@ -304,11 +304,11 @@ def main
 
 eos
 
-    STDERR.write "<<< #{own_references.size} OWN REFERENCES"
+    STDERR.write "<<< #{own_references.reject{|i|!i}.size} OWN REFERENCES\n"
     own_references.each_with_index { |i,j|
-      STDERR.write "#{j} '#{i}'" if i 
+      STDERR.write "#{j} '#{i}'\n" if i 
     }
-    STDERR.write ">>>"
+    STDERR.write ">>>\n"
 
   }
 end
