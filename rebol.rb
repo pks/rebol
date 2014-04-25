@@ -91,18 +91,18 @@ def main
     opt :debug,          "debug output",                  :type => :bool,   :default => false, :short => '-d'
     opt :print_kbest,    "print full kbest lists",        :type => :bool,   :default => false, :short => '-l'
     # [learning parameters]
-    opt :eta,                    "learning rate",                                              :type => :float, :default => 0.01,   :short => '-e'
-    opt :iterate,                "iteration X epochs",                                         :type => :int,   :default => 1,      :short => '-j'
-    opt :stop_after,             "stop after x examples",                                      :type => :int,   :default => -1,     :short => '-s'
-    opt :scale_model,            "scale model scores by this factor",                          :type => :float, :default => 1.0,    :short => '-m'
-    opt :normalize,              "normalize weights after each update",                        :type => :bool,  :default => false,  :short => '-n'
+    opt :eta,                    "learning rate",                                              :type => :float,  :default => 0.01,      :short => '-e'
+    opt :iterate,                "iteration X epochs",                                         :type => :int,    :default => 1,         :short => '-j'
+    opt :stop_after,             "stop after x examples",                                      :type => :int,    :default => -1,        :short => '-s'
+    opt :scale_model,            "scale model scores by this factor",                          :type => :float,  :default => 1.0,       :short => '-m'
+    opt :normalize,              "normalize weights after each update",                        :type => :bool,   :default => false,     :short => '-n'
     # don't use when 'bad' examples are filtered:
-    opt :skip_on_no_proper_gold, "skip, if the reference didn't produce a proper gold output", :type => :bool,  :default => false,  :short => '-x'
-    opt :no_update,              "don't update weights",                                       :type => :bool,  :default => false,  :short => '-y'
+    opt :skip_on_no_proper_gold, "skip, if the reference didn't produce a proper gold output", :type => :bool,   :default => false,     :short => '-x'
+    opt :no_update,              "don't update weights",                                       :type => :bool,   :default => false,     :short => '-y'
     # don't use:
-    opt :hope_fear_max,          "# entries to consider when searching good hope/fear",        :type => :int,   :default => 10**10, :short => '-q'
+    opt :hope_fear_max,          "# entries to consider when searching good hope/fear",        :type => :int,    :default => 10**10,    :short => '-q'
     # see hopefear.rb:
-    opt :variant, "standard, rampion, fear_no_exec, fear_no_exec_skip, fear_no_exec_hope_exec, fear_no_exec_hope_exec_skip, only_exec", :default => 'standard', :short => '-v'
+    opt :variant, "rampion, rebol, rebol_light, exec",                                         :type => :string, :default => 'rampion', :short => '-v'
   end
 
   require_relative cfg[:global_vars]
@@ -119,9 +119,8 @@ def main
   gold_mrl   = ReadFile.readlines_strip cfg[:gold_mrl]
   stopwords  = ReadFile.readlines_strip cfg[:stopwords_file]
 
-  # only for 'only_exec' variant
   own_references = nil
-  own_references = references.map{ |i| nil } if cfg[:variant]=='only_exec'
+  own_references = references.map{ |i| nil }
 
   # initialize model
   w = SparseVector.from_file cfg[:init_weights], ' '
@@ -211,28 +210,21 @@ def main
       hope = fear = new_reference = nil
       type1 = type2 = skip = false
       case cfg[:variant]
-      when 'standard'
-        hope, fear, skip, type1, type2 = gethopefear_standard kbest, feedback
       when 'rampion'
         hope, fear, skip, type1, type2 = gethopefear_rampion kbest, references[j]
-      when 'fear_no_exec_skip'
-        hope, fear, skip, type1, type2 = gethopefear_fear_no_exec_skip kbest, feedback, gold[j]
-      when 'fear_no_exec'
-        hope, fear, skip, type1, type2 = gethopefear_fear_no_exec kbest, feedback, gold[j], cfg[:hope_fear_max]
-      when 'fear_no_exec_hope_exec'
-        hope, fear, skip, type1, type2 = gethopefear_fear_no_exec_hope_exec kbest, feedback, gold[j], cfg[:hope_fear_max]
-      when 'fear_no_exec_hope_exec_skip'
-        hope, fear, skip, type1, type2 = gethopefear_fear_no_exec_hope_exec_skip kbest, feedback, gold[j], cfg[:hope_fear_max]
+      when 'rebol'
+        hope, fear, skip, type1, type2, new_reference = gethopefear_rebol kbest, feedback, gold[j], cfg[:hope_fear_max], own_references[j]
+      when 'rebol_light'
+        hope, fear, skip, type1, type2 = gethopefear_rebol_light kbest, feedback, gold[j]
       when 'only_exec'
-        hope, fear, skip, type1, type2, new_reference = gethopefear_only_exec kbest, feedback, gold[j], cfg[:hope_fear_max], own_references[j]
+        hope, fear, skip, type1, type2, new_reference = gethopefear_exec kbest, feedback, gold[j], cfg[:hope_fear_max], own_references[j]
       else
         STDERR.write "NO SUCH VARIANT, exiting.\n"
         exit 1
       end
 
-      # for 'only_exec' variant
       if new_reference
-        own_references[j] = new_reference
+        own_references[j] = new_reference.s
       end
 
       type1_updates+=1 if type1
@@ -311,6 +303,12 @@ def main
 #{fear_stats.to_s count}
 
 eos
+
+    STDERR.write "<<< #{own_references.size} OWN REFERENCES"
+    own_references.each_with_index { |i,j|
+      STDERR.write "#{j} '#{i}'" if i 
+    }
+    STDERR.write ">>>"
 
   }
 end

@@ -2,8 +2,8 @@
 
 # memcached has to be running! `memcached -p 31337`
 
-# run lampion with rampion variant for 1 epoch over 10 examples (data.*)
-../lampion.rb \
+# run rebol with rampion variant for 1 epoch over 10 examples (data.*)
+../rebol.rb \
   -k 100 \
   -i $(pwd)/data.in \
   -r $(pwd)/data.en \
