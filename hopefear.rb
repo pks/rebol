@@ -18,8 +18,8 @@ def gethopefear_rebol kbest, feedback, gold, max, own_reference=nil
   if feedback == true
     # hope
     hope = kbest[0]
-    new_reference = hope.s
-    kbest.each { |k| k.scores[:per_sentence_bleu] = BLEU::per_sentence_bleu k.s, new_reference }
+    new_reference = hope
+    kbest.each { |k| k.scores[:per_sentence_bleu] = BLEU::per_sentence_bleu k.s, new_reference.s }
     # fear
     kbest.sort_by { |k| -(k.scores[:decoder]-k.scores[:per_sentence_bleu]) }.each_with_index { |k,i|
       break if i==max
@@ -67,7 +67,7 @@ def gethopefear_exec kbest, feedback, gold, max, own_reference=nil
   type1 = type2 = false
   if feedback == true
     hope = kbest[0]
-    new_reference = hope.s
+    new_reference = hope
     type1 = true
   elsif own_reference
     hope = own_reference
