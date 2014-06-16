@@ -27,7 +27,7 @@ results are cached with _memcached_ [5].
 
 You'll also need the following _ruby gems_:
  * https://rubygems.org/gems/memcached
- * http://rubygems.org/gems/nlp_ruby
+ * http://rubygems.org/gems/zipf
  * http://trollop.rubyforge.org/
 
 
