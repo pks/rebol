@@ -9,7 +9,7 @@ Code for grounded SMT on geoquery data or Free917 data.
 Dependencies
 ------------
 
-Geoquery:
+###Geoquery:
 _WASP_-1.0 includes the geoquery knowledge base and scripts for querying it.
 The evaluation scripts were slightly modified to produce full outputs.
 These scripts can be found in data/geoquery/wasp/, and they go into wasp-1.0/data/geo-funql/eval/.
@@ -22,12 +22,12 @@ as described in *Semantic parsing as machine translation* (Andreas et al, ACL 20
 Our fork can be found here [3]. This software depends on more stuff, e.g. the Moses decoder
 and SRILM.
 
-Free917:
+###Free917:
 The parser used for Free917 is _sempre_,
 as described in *Semantic Parsing on Freebase from Question-Answer Pairs* (Berant et al, EMNLP 2013).
 It can be downloaded here [4] and further dependencies can be found in QUICKSTART.md.
 
-Both:
+###Both:
 For translation we use the _cdec_ toolkit, [5].
 
 As semantic parsing is quite slow and rebol does it quite often,
