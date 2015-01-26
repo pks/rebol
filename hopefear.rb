@@ -12,7 +12,7 @@ def hope_and_fear kbest, action
   return max_idx
 end
 
-def gethopefear_rebol kbest, feedback, gold, max, own_reference=nil
+def gethopefear_rebol kbest, feedback, gold, max, corpus, own_reference=nil
   hope = fear = nil; new_reference = nil
   type1 = type2 = false
   if feedback == true
@@ -23,7 +23,7 @@ def gethopefear_rebol kbest, feedback, gold, max, own_reference=nil
     # fear
     kbest.sort_by { |k| -(k.scores[:decoder]-k.scores[:per_sentence_bleu]) }.each_with_index { |k,i|
       break if i==max
-      if !exec(k.s, gold, true)[0]
+      if !exec(k.s, gold, corpus, true)[0]
         fear = k
         break
       end
@@ -35,7 +35,7 @@ def gethopefear_rebol kbest, feedback, gold, max, own_reference=nil
     # hope
     kbest.sort_by { |k| -(k.scores[:decoder]+k.scores[:per_sentence_bleu]) }.each_with_index { |k,i|
       break if i==max
-      if exec(k.s, gold, true)[0]
+      if exec(k.s, gold, corpus, true)[0]
         hope = k
         break
       end
@@ -46,7 +46,7 @@ def gethopefear_rebol kbest, feedback, gold, max, own_reference=nil
   return hope, fear, skip, type1, type2, new_reference
 end
 
-def gethopefear_rebol_light kbest, feedback, gold
+def gethopefear_rebol_light kbest, feedback, gold, corpus
   hope = fear = nil
   type1 = type2 = false
   if feedback == true
@@ -58,26 +58,30 @@ def gethopefear_rebol_light kbest, feedback, gold
   end
   fear = kbest[hope_and_fear kbest, 'fear']
   # skip example if fear gives the right answer
-  skip = exec(fear.s, gold, true)[0]
+  skip = exec(fear.s, gold, corpus, true)[0]
   return hope, fear, skip, type1, type2
 end
 
-def gethopefear_exec kbest, feedback, gold, max, own_reference=nil
+def gethopefear_exec kbest, feedback, gold, max, corpus, own_reference=nil
   hope = fear = nil; hope_idx = 0; new_reference = nil
   type1 = type2 = false
   if feedback == true
+    STDERR.write "If\n"
     hope = kbest[0]
     new_reference = hope
     type1 = true
   elsif own_reference
+    STDERR.write "elsif\n"
+    STDERR.write "#{own_reference.class}\n"
     hope = own_reference
     type1 = true
   else
+    STDERR.write "else\n"
     # search for first (by decoder score) translation that gives the correct answer
     kbest.each_with_index { |k,i|
       next if i==0
       break if i==max
-      if exec(k.s, gold, true)[0]
+      if exec(k.s, gold, corpus, true)[0]
         hope_idx = i
         hope = k
         break
@@ -89,7 +93,7 @@ def gethopefear_exec kbest, feedback, gold, max, own_reference=nil
   kbest.each_with_index { |k,i|
     next if i==0||i==hope_idx
     break if i==max
-    if !exec(k.s, gold, true)[0]
+    if !exec(k.s, gold, corpus, true)[0]
       fear = k
       break
     end

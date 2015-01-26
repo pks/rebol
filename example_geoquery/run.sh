@@ -19,6 +19,7 @@ CDEC=/toolbox/cdec
   -l \
   -e 0.01 \
   -j 1 \
+  -u geoquery \
   -v rebol 2>output.stderr > output.stdout
 
 # translate test

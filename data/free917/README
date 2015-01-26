@@ -1,0 +1,13 @@
+free917v2.dev.gold		: gold answers for the development set
+free917v2.dev.mrl		: simple lambda formulas for the development set
+free917v2.dev.tok.de	: English sentences for the development set
+free917v2.dev.tok.en	: German sentences for the development set
+free917v2.test.gold		: gold answers for the test set
+free917v2.test.mrl		: simple lambda formulas for the test set
+free917v2.test.tok.de	: English sentences for the test set
+free917v2.test.tok.en	: German sentences for the test set
+README             		: this file
+
+../stopwords.en : English stopwords file
+../weights.init : initial weights
+
