@@ -9,9 +9,6 @@ require_relative './hopefear'
 require 'pty'
 require 'expect'
 
-# memcached has to be running
-$cache = Memcached.new('localhost:11211')
-
 def exec natural_language_string, reference_output, corpus, no_output=false
   mrl = output = feedback = nil
   # this may cause collisions, but there are not so many German words that
@@ -193,7 +190,6 @@ def main
 
   # initialize model
   w = SparseVector.from_file cfg[:init_weights], ' '
-  last_weights_fn = ''
 
   # iterations loop
   cfg[:iterate].times { |iter|
@@ -223,7 +219,6 @@ def main
       # write weights to file for cdec
       tmp_file        = Tempfile.new('rampion')
       tmp_file_path   = tmp_file.path
-      last_weights_fn = tmp_file.path
       tmp_file.write w.to_kv ' ', "\n"
       tmp_file.close
 
@@ -347,9 +342,9 @@ def main
 
     # save all weights
     if cfg[:iterate] > 1
-      WriteFile.write ReadFile.read(last_weights_fn), "#{cfg[:output_weights]}.#{iter}.gz"
+      WriteFile.write(w.to_kv(' ', "\n"), "#{cfg[:output_weights]}.#{iter}.gz")
     else
-      FileUtils::cp(last_weights_fn, cfg[:output_weights])
+      WriteFile.write(w.to_kv(' ', "\n"), "#{cfg[:output_weights]}")
     end
 
     STDERR.write  <<-eos
